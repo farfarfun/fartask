@@ -20,7 +20,7 @@ from nltlog import getLogger
 
 from .manager import TaskManager
 
-logger = getLogger("nltbuild")
+logger = getLogger("nlttask")
 
 
 def submit_task():
