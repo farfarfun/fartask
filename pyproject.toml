@@ -4,7 +4,7 @@ version = "1.0.4"
 description = "nlttask"
 readme = "README.md"
 requires-python = ">=3.8"
-dependencies = [ "funshell>=1.0.19", "nltlog>=1.1.3", "sqlalchemy>=2.0.50",]
+dependencies = [ "funshell>=1.0.19", "nltlog>=1.1.3", "sqlalchemy>=2.0.50", "nicegui>=1.4.0",]
 [[project.authors]]
 name = "牛哥"
 email = "niuliangtao@qq.com"
@@ -28,3 +28,6 @@ Releases = "https://github.com/farfarfun/funtask/releases"
 
 [tool.setuptools]
 license-files = []
+
+[dependency-groups]
+dev = [ "pytest>=7.0",]
