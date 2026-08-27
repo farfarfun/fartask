@@ -12,7 +12,7 @@
 1. `nlttask.models.task_model` 在模块导入时就会以相对路径 "sqlite:///tasks.db"
    创建引擎并执行 `Base.metadata.create_all(engine)`，即无论谁在什么目录下
    import 这个模块，都会在当前工作目录下产生一个真实的 tasks.db 文件（以及
-   nltlog 附带产生的 logs/ 目录）。测试中我们用 tmp_path + chdir 隔离，避免
+   farlog 附带产生的 logs/ 目录）。测试中我们用 tmp_path + chdir 隔离，避免
    污染仓库目录。
 2. `nlttask.task.submit.submit_task()` 中
    `os.path.join(os.environ["HOME"], "/workbench", timestamp)` 的第二个参数
