@@ -1,35 +1,18 @@
 name: Python application
 
-on: [push]
+on: [push, pull_request]
 
 jobs:
-  build:
-
+  test:
     runs-on: ubuntu-latest
 
     steps:
     - uses: actions/checkout@v4
-    - name: Set up Python 3.8
+    - name: Set up Python
       uses: actions/setup-python@v5
       with:
-        python-version: 3.8
-    - name: Install xmllint
-      run: sudo apt-get install -y libcurl4-openssl-dev
-    - name: Update paper list
-      run: |
-        ping www.baidu.com
-        mkdir ~/.secret
-        echo '${{ secrets.NOTETOOL_SECRET }}' > ~/.secret/secret_str
-        pip install -q -U pip
-        pip install -q pandas numpy tqdm demjson
-        pip install -q git+https://github.com/notechats/notebuild.git
-        pip install -q git+https://github.com/notechats/notetool.git
-        pip install -q git+https://github.com/notechats/notedrive.git
-        pip install -q git+https://github.com/notechats/notecoin.git
-        pip install -q git+https://github.com/notechats/notegame.git
-        pip install -q git+https://github.com/notechats/notetask.git
-        pip install -q git+https://github.com/notechats/noteodps.git
-        pwd
-        ls -al
-        cd notetask/task
-        python task1.py
+        python-version: "3.12"
+    - name: Install dependencies
+      run: pip install -e . pytest
+    - name: Run tests
+      run: pytest tests/

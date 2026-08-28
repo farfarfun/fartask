@@ -1,7 +1,7 @@
 [project]
-name = "nlttask"
+name = "fartask"
 version = "1.0.6"
-description = "nlttask"
+description = "Task submission and tracking for SLURM/C++ compute jobs, with a NiceGUI web dashboard"
 readme = "README.md"
 requires-python = ">=3.8"
 dependencies = [ "funshell>=1.0.19", "farlog>=1.1.7", "sqlalchemy>=2.0.50", "nicegui>=1.4.0",]
@@ -23,8 +23,8 @@ email = "farfarfun@qq.com"
 
 [project.urls]
 Organization = "https://github.com/farfarfun"
-Repository = "https://github.com/farfarfun/funtask"
-Releases = "https://github.com/farfarfun/funtask/releases"
+Repository = "https://github.com/farfarfun/fartask"
+Releases = "https://github.com/farfarfun/fartask/releases"
 
 [build-system]
 requires = ["hatchling"]

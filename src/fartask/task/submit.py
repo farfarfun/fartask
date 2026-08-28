@@ -20,7 +20,7 @@ from farlog import getLogger
 
 from .manager import TaskManager
 
-logger = getLogger("nlttask")
+logger = getLogger("fartask")
 
 
 def submit_task():

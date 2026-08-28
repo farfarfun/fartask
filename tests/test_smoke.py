@@ -1,7 +1,6 @@
 """轻量级冒烟测试套件（smoke tests）。
 
-该仓库（farfarfun/funtask）此前没有任何 tests/ 目录。
-注意命名坑：仓库名是 funtask，但实际 Python 导入名是 nlttask（历史遗留命名不一致）。
+该仓库（farfarfun/fartask）此前没有任何 tests/ 目录。
 
 这些测试只做最基础的“能不能跑起来”的验证：
 - 顶层包 / 子模块能否正常 import
@@ -9,12 +8,12 @@
 - 任何会连接真实数据库/发起真实 shell 调用的地方都用 mock 隔离
 
 已知问题（发现但按要求不在本测试任务中修复，见注释 / 最终汇报）：
-1. `nlttask.models.task_model` 在模块导入时就会以相对路径 "sqlite:///tasks.db"
+1. `fartask.models.task_model` 在模块导入时就会以相对路径 "sqlite:///tasks.db"
    创建引擎并执行 `Base.metadata.create_all(engine)`，即无论谁在什么目录下
    import 这个模块，都会在当前工作目录下产生一个真实的 tasks.db 文件（以及
    farlog 附带产生的 logs/ 目录）。测试中我们用 tmp_path + chdir 隔离，避免
    污染仓库目录。
-2. `nlttask.task.submit.submit_task()` 中
+2. `fartask.task.submit.submit_task()` 中
    `os.path.join(os.environ["HOME"], "/workbench", timestamp)` 的第二个参数
    以 "/" 开头，会被 os.path.join 丢弃前面的部分，实际结果恒为
    "/workbench/<timestamp>"，而不是用户预期的 "$HOME/workbench/<timestamp>"。
@@ -31,15 +30,15 @@ import pytest
 
 
 def test_import_top_level_package():
-    """顶层包 `nlttask` 应该可以被正常导入（不触发任何真实 IO）。"""
-    import nlttask
+    """顶层包 `fartask` 应该可以被正常导入（不触发任何真实 IO）。"""
+    import fartask
 
-    assert hasattr(nlttask, "Task")
+    assert hasattr(fartask, "Task")
 
 
 def test_task_class_basic_usage():
     """核心公开类 Task 用简单参数构造和调用应不报错。"""
-    from nlttask import Task
+    from fartask import Task
 
     task = Task()
     assert task.run() is None
@@ -49,9 +48,9 @@ def test_task_class_basic_usage():
 
 
 def test_models_package_importable():
-    """nlttask.models 子包能正常导入并暴露 Task。"""
-    from nlttask.models import Task
-    from nlttask.models.base import Task as BaseTask
+    """fartask.models 子包能正常导入并暴露 Task。"""
+    from fartask.models import Task
+    from fartask.models.base import Task as BaseTask
 
     assert Task is BaseTask
 
@@ -59,20 +58,20 @@ def test_models_package_importable():
 def test_task_manager_crud_isolated(tmp_path, monkeypatch):
     """TaskManager 的基本 CRUD 流程冒烟测试。
 
-    nlttask.models.task_model 在 import 时会用相对路径创建 sqlite 文件，
+    fartask.models.task_model 在 import 时会用相对路径创建 sqlite 文件，
     因此这里先 chdir 到隔离的临时目录，并清掉可能已缓存的模块，确保
     sqlite 文件落在 tmp_path 而不是污染仓库目录或复用其它测试遗留的状态。
     """
     monkeypatch.chdir(tmp_path)
 
     for mod_name in (
-        "nlttask.task.manager",
-        "nlttask.models.task_model",
+        "fartask.task.manager",
+        "fartask.models.task_model",
     ):
         sys.modules.pop(mod_name, None)
 
-    task_model_mod = importlib.import_module("nlttask.models.task_model")
-    manager_mod = importlib.import_module("nlttask.task.manager")
+    task_model_mod = importlib.import_module("fartask.models.task_model")
+    manager_mod = importlib.import_module("fartask.task.manager")
 
     assert (tmp_path / "tasks.db").exists()
 
@@ -113,7 +112,7 @@ def test_submit_task_smoke(tmp_path, monkeypatch):
     （见文件头注释），会导致 task_dir 恒为 "/workbench/<ts>"。为了不真的在
     根目录下建目录，这里把 os.makedirs 也 mock 掉。
     """
-    from nlttask.task import submit as submit_mod
+    from fartask.task import submit as submit_mod
 
     monkeypatch.setenv("HOME", str(tmp_path))
 
@@ -133,7 +132,7 @@ def test_submit_task_smoke(tmp_path, monkeypatch):
 
 
 def test_web_app_importable(tmp_path, monkeypatch):
-    """nlttask.web.app 是 __main__ 入口引用的公开子模块，应能正常 import。
+    """fartask.web.app 是 __main__ 入口引用的公开子模块，应能正常 import。
 
     该模块 import 时会在模块级别构造一个真实的 TaskManager()（连接 sqlite），
     因此同样通过 chdir 到隔离目录来避免污染仓库工作目录。不调用
@@ -142,14 +141,14 @@ def test_web_app_importable(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
 
     for mod_name in (
-        "nlttask.web.app",
-        "nlttask.task.submit",
-        "nlttask.task.manager",
-        "nlttask.models.task_model",
+        "fartask.web.app",
+        "fartask.task.submit",
+        "fartask.task.manager",
+        "fartask.models.task_model",
     ):
         sys.modules.pop(mod_name, None)
 
-    app_mod = importlib.import_module("nlttask.web.app")
+    app_mod = importlib.import_module("fartask.web.app")
 
     assert callable(app_mod.start_web_server)
     assert callable(app_mod.create_task_list)
