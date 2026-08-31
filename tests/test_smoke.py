@@ -1,32 +1,24 @@
-"""轻量级冒烟测试套件（smoke tests）。
+"""fartask 测试套件。
 
-该仓库（farfarfun/fartask）此前没有任何 tests/ 目录。
-
-这些测试只做最基础的“能不能跑起来”的验证：
-- 顶层包 / 子模块能否正常 import
-- 核心公开类/函数用简单参数调用是否报错
-- 任何会连接真实数据库/发起真实 shell 调用的地方都用 mock 隔离
-
-已知问题（发现但按要求不在本测试任务中修复，见注释 / 最终汇报）：
-1. `fartask.models.task_model` 在模块导入时就会以相对路径 "sqlite:///tasks.db"
-   创建引擎并执行 `Base.metadata.create_all(engine)`，即无论谁在什么目录下
-   import 这个模块，都会在当前工作目录下产生一个真实的 tasks.db 文件（以及
-   farlog 附带产生的 logs/ 目录）。测试中我们用 tmp_path + chdir 隔离，避免
-   污染仓库目录。
-2. `fartask.task.submit.submit_task()` 中
-   `os.path.join(os.environ["HOME"], "/workbench", timestamp)` 的第二个参数
-   以 "/" 开头，会被 os.path.join 丢弃前面的部分，实际结果恒为
-   "/workbench/<timestamp>"，而不是用户预期的 "$HOME/workbench/<timestamp>"。
-   这会导致 os.makedirs 尝试在系统根目录下建目录（非 root 用户会因权限不足而
-   失败）。这是一个业务逻辑 bug，测试中通过 mock os.makedirs / run_shell /
-   TaskManager 绕开，不在本任务范围内修复。
+覆盖：
+- 顶层包 / 子模块的 import
+- 核心公开类/函数的基础调用
+- TaskManager 的 CRUD 流程（真实 sqlite，隔离在 tmp_path）
+- submit_task() 的 SLURM/C++ 两条真实成功路径（真实执行 g++/subprocess，
+  不 mock 掉核心行为），以及"两种任务文件都不存在"的边界情况
 """
 
 import importlib
+import os
 import sys
-from unittest.mock import MagicMock, patch
 
 import pytest
+
+
+def _reload_isolated(*mod_names):
+    """清掉缓存的模块，确保下次 import 会用当前 cwd 重新初始化数据库连接。"""
+    for name in mod_names:
+        sys.modules.pop(name, None)
 
 
 def test_import_top_level_package():
@@ -55,28 +47,27 @@ def test_models_package_importable():
     assert Task is BaseTask
 
 
-def test_task_manager_crud_isolated(tmp_path, monkeypatch):
-    """TaskManager 的基本 CRUD 流程冒烟测试。
-
-    fartask.models.task_model 在 import 时会用相对路径创建 sqlite 文件，
-    因此这里先 chdir 到隔离的临时目录，并清掉可能已缓存的模块，确保
-    sqlite 文件落在 tmp_path 而不是污染仓库目录或复用其它测试遗留的状态。
-    """
+def test_task_model_import_has_no_side_effect(tmp_path, monkeypatch):
+    """import fartask.models.task_model 不应在当前工作目录创建任何文件。"""
     monkeypatch.chdir(tmp_path)
+    _reload_isolated("fartask.models.task_model")
 
-    for mod_name in (
-        "fartask.task.manager",
-        "fartask.models.task_model",
-    ):
-        sys.modules.pop(mod_name, None)
+    importlib.import_module("fartask.models.task_model")
 
-    task_model_mod = importlib.import_module("fartask.models.task_model")
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_task_manager_crud_isolated(tmp_path, monkeypatch):
+    """TaskManager 的基本 CRUD 流程冒烟测试（隔离在临时目录的真实 sqlite）。"""
+    monkeypatch.chdir(tmp_path)
+    _reload_isolated("fartask.task.manager", "fartask.models.task_model")
+
     manager_mod = importlib.import_module("fartask.task.manager")
-
-    assert (tmp_path / "tasks.db").exists()
 
     manager = manager_mod.TaskManager()
     try:
+        assert (tmp_path / "tasks.db").exists()
+
         created = manager.create_task(
             task_dir=str(tmp_path / "task_1"),
             task_type="cpp",
@@ -102,51 +93,89 @@ def test_task_manager_crud_isolated(tmp_path, monkeypatch):
     finally:
         manager.session.close()
 
-    del task_model_mod  # 仅用于避免 lint 误报未使用
 
-
-def test_submit_task_smoke(tmp_path, monkeypatch):
-    """submit_task() 冒烟测试：mock 掉所有真实 shell / 文件系统 / DB 交互。
-
-    注意：submit_task 内部存在 os.path.join(home, "/workbench", ts) 的 bug
-    （见文件头注释），会导致 task_dir 恒为 "/workbench/<ts>"。为了不真的在
-    根目录下建目录，这里把 os.makedirs 也 mock 掉。
-    """
-    from fartask.task import submit as submit_mod
-
+def test_submit_task_slurm_path(tmp_path, monkeypatch):
+    """submit_task() 的 SLURM 成功路径：检测到 config.slurm 后创建任务记录并提交。"""
     monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "config.slurm").write_text("#!/bin/bash\necho hi\n")
 
-    fake_manager = MagicMock()
-    with patch.object(submit_mod, "TaskManager", return_value=fake_manager), patch.object(
-        submit_mod, "run_shell"
-    ) as mock_run_shell, patch.object(submit_mod.os, "makedirs") as mock_makedirs, patch.object(
-        submit_mod.os.path, "exists", return_value=False
-    ):
-        result = submit_mod.submit_task()
+    _reload_isolated(
+        "fartask.task.submit", "fartask.task.manager", "fartask.models.task_model"
+    )
+    submit_mod = importlib.import_module("fartask.task.submit")
 
-    assert result is not None
-    mock_makedirs.assert_called_once()
-    mock_run_shell.assert_called_once()
-    # 没有检测到 config.slurm / main.cpp，因此不应该真正创建任务记录
-    fake_manager.create_task.assert_not_called()
+    task_dir = submit_mod.submit_task()
+
+    assert task_dir == os.path.join(str(tmp_path), "workbench", os.path.basename(task_dir))
+    assert os.path.isdir(task_dir)
+
+    manager = submit_mod.TaskManager()
+    try:
+        tasks = manager.get_all_tasks()
+        assert len(tasks) == 1
+        assert tasks[0].task_type == "slurm"
+        assert tasks[0].status == "running"
+    finally:
+        manager.session.close()
+
+
+def test_submit_task_cpp_path(tmp_path, monkeypatch):
+    """submit_task() 的 C++ 成功路径：无 config.slurm 但有 main.cpp 时真实编译并执行。"""
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "main.cpp").write_text(
+        '#include <cstdio>\nint main() { printf("ok\\n"); return 0; }\n'
+    )
+
+    _reload_isolated(
+        "fartask.task.submit", "fartask.task.manager", "fartask.models.task_model"
+    )
+    submit_mod = importlib.import_module("fartask.task.submit")
+
+    task_dir = submit_mod.submit_task()
+
+    assert os.path.exists(os.path.join(task_dir, "task.app"))
+
+    manager = submit_mod.TaskManager()
+    try:
+        tasks = manager.get_all_tasks()
+        assert len(tasks) == 1
+        assert tasks[0].task_type == "cpp"
+        assert tasks[0].status == "completed"
+    finally:
+        manager.session.close()
+
+
+def test_submit_task_no_recognized_file(tmp_path, monkeypatch):
+    """既没有 config.slurm 也没有 main.cpp 时：创建任务目录，但不产生任务记录。"""
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.chdir(tmp_path)
+
+    _reload_isolated(
+        "fartask.task.submit", "fartask.task.manager", "fartask.models.task_model"
+    )
+    submit_mod = importlib.import_module("fartask.task.submit")
+
+    task_dir = submit_mod.submit_task()
+
+    assert os.path.isdir(task_dir)
+    manager = submit_mod.TaskManager()
+    try:
+        assert manager.get_all_tasks() == []
+    finally:
+        manager.session.close()
 
 
 def test_web_app_importable(tmp_path, monkeypatch):
-    """fartask.web.app 是 __main__ 入口引用的公开子模块，应能正常 import。
-
-    该模块 import 时会在模块级别构造一个真实的 TaskManager()（连接 sqlite），
-    因此同样通过 chdir 到隔离目录来避免污染仓库工作目录。不调用
-    start_web_server()，因为那会真的启动一个 web 服务进程。
-    """
+    """fartask.web.app 是 __main__ 入口引用的公开子模块，应能正常 import。"""
     monkeypatch.chdir(tmp_path)
-
-    for mod_name in (
+    _reload_isolated(
         "fartask.web.app",
         "fartask.task.submit",
         "fartask.task.manager",
         "fartask.models.task_model",
-    ):
-        sys.modules.pop(mod_name, None)
+    )
 
     app_mod = importlib.import_module("fartask.web.app")
 

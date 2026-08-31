@@ -1,9 +1,10 @@
 [project]
 name = "fartask"
-version = "1.0.6"
+version = "1.0.7"
 description = "Task submission and tracking for SLURM/C++ compute jobs, with a NiceGUI web dashboard"
 readme = "README.md"
 requires-python = ">=3.10"
+license = "MIT"
 dependencies = [ "funshell>=1.0.19", "farlog>=1.1.7", "sqlalchemy>=2.0.50", "nicegui>=1.4.0",]
 [[project.authors]]
 name = "牛哥"

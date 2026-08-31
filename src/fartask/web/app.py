@@ -1,11 +1,14 @@
+"""任务管理系统的 NiceGUI 网页看板。"""
+
 from nicegui import ui
+
 from ..task.manager import TaskManager
-from ..task.submit import submit_task
 
 task_manager = TaskManager()
 
 
-def create_task_list():
+def create_task_list() -> None:
+    """渲染任务列表卡片：表格展示 + 刷新/查看输出/删除操作。"""
     with ui.card().classes("w-full"):
         ui.label("任务列表").classes("text-h6")
 
@@ -81,10 +84,17 @@ def create_task_list():
 
 
 @ui.page("/")
-def main_page():
+def main_page() -> None:
+    """网页看板首页。"""
     ui.label("任务管理系统").classes("text-h4 q-mb-md")
     create_task_list()
 
 
-def start_web_server(host="0.0.0.0", port=8080):
+def start_web_server(host: str = "0.0.0.0", port: int = 8080) -> None:
+    """启动 NiceGUI 网页看板服务（前台阻塞运行）。
+
+    Args:
+        host: 监听地址，默认 0.0.0.0。
+        port: 监听端口，默认 8080。
+    """
     ui.run(host=host, port=port, title="任务管理系统")

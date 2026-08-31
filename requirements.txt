@@ -1,4 +1,0 @@
-sqlalchemy>=2.0.0
-nicegui>=1.4.0
-funbuild
-funutil

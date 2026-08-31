@@ -1,31 +1,38 @@
-"""
-#!/bin/bash
-task_root='/work/home/liuc12/workbench'
-timestamp=$(date +"%Y%m%d%H%M%S")
-task_dir="$task_root/task_$timestamp"
+"""SLURM 集群任务 / 本地 C++ 编译运行任务的提交入口。
 
-mkdir "$task_dir"
-cp -r *.cpp *.h *.sh *.slurm *.f90 *.dat  $task_dir 2>/dev/null
-cd "$task_dir"
-pwd
-#ls -al
-sbatch config.slurm
+对应的手工提交流程（供参考）：
+
+    #!/bin/bash
+    task_root='/work/home/liuc12/workbench'
+    timestamp=$(date +"%Y%m%d%H%M%S")
+    task_dir="$task_root/task_$timestamp"
+
+    mkdir "$task_dir"
+    cp -r *.cpp *.h *.sh *.slurm *.f90 *.dat  $task_dir 2>/dev/null
+    cd "$task_dir"
+    pwd
+    sbatch config.slurm
 """
 
 import os
 from datetime import datetime
 
-from funshell import run_shell
 from farlog import getLogger
+from funshell import run_shell
 
 from .manager import TaskManager
 
 logger = getLogger("fartask")
 
 
-def submit_task():
+def submit_task() -> str:
+    """提交当前目录下的任务：优先 SLURM（config.slurm），否则本地编译运行（main.cpp）。
+
+    Returns:
+        本次提交使用的任务目录。
+    """
     task_dir = os.path.join(
-        os.environ["HOME"], "/workbench", datetime.now().strftime("%Y%m%d%H%M%S")
+        os.environ["HOME"], "workbench", datetime.now().strftime("%Y%m%d%H%M%S")
     )
     logger.info(f"任务主目录：{task_dir}")
     os.makedirs(task_dir, exist_ok=True)

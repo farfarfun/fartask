@@ -1,12 +1,16 @@
+"""任务记录的 SQLAlchemy 模型与数据库会话管理。"""
+
 from datetime import datetime
-from sqlalchemy import create_engine, Column, Integer, String, DateTime, Text
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
+
+from sqlalchemy import Column, DateTime, Integer, String, Text, create_engine
+from sqlalchemy.orm import declarative_base, sessionmaker
 
 Base = declarative_base()
 
 
 class TaskModel(Base):
+    """任务记录表：一条记录对应一次 SLURM/C++ 任务提交。"""
+
     __tablename__ = "tasks"
 
     id = Column(Integer, primary_key=True)
@@ -21,7 +25,42 @@ class TaskModel(Base):
     output = Column(Text, nullable=True)
 
 
-# 创建数据库连接
-engine = create_engine("sqlite:///tasks.db", echo=True)
-Base.metadata.create_all(engine)
-Session = sessionmaker(bind=engine)
+_engine = None
+_session_factory = None
+
+
+def get_engine(db_path: str = "sqlite:///tasks.db"):
+    """获取（并按需惰性初始化）数据库引擎，避免在 import 时产生副作用。
+
+    Args:
+        db_path: 数据库连接串，默认在当前工作目录下的 tasks.db。
+
+    Returns:
+        SQLAlchemy Engine 实例。
+    """
+    global _engine
+    if _engine is None:
+        _engine = create_engine(db_path)
+        Base.metadata.create_all(_engine)
+    return _engine
+
+
+def get_session_factory():
+    """获取（并按需惰性初始化）Session 工厂。
+
+    Returns:
+        SQLAlchemy sessionmaker 实例。
+    """
+    global _session_factory
+    if _session_factory is None:
+        _session_factory = sessionmaker(bind=get_engine())
+    return _session_factory
+
+
+def Session():  # noqa: N802 - 保持历史调用方式 Session() 兼容
+    """创建一个新的数据库会话（惰性初始化引擎，import 时不产生副作用）。
+
+    Returns:
+        SQLAlchemy Session 实例。
+    """
+    return get_session_factory()()
