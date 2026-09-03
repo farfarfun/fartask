@@ -4,7 +4,15 @@ from nicegui import ui
 
 from ..task.manager import TaskManager
 
-task_manager = TaskManager()
+_task_manager: TaskManager | None = None
+
+
+def get_task_manager() -> TaskManager:
+    """获取（并按需惰性初始化）任务管理器，避免在 import 时创建数据库引擎。"""
+    global _task_manager
+    if _task_manager is None:
+        _task_manager = TaskManager()
+    return _task_manager
 
 
 def create_task_list() -> None:
@@ -22,7 +30,7 @@ def create_task_list() -> None:
             {"name": "description", "label": "描述", "field": "description"},
         ]
 
-        tasks = task_manager.get_all_tasks()
+        tasks = get_task_manager().get_all_tasks()
         rows = [
             {
                 "id": task.id,
@@ -38,7 +46,7 @@ def create_task_list() -> None:
         table = ui.table(columns=columns, rows=rows, row_key="id").classes("w-full")
 
         async def refresh_table():
-            tasks = task_manager.get_all_tasks()
+            tasks = get_task_manager().get_all_tasks()
             rows = [
                 {
                     "id": task.id,
@@ -53,14 +61,14 @@ def create_task_list() -> None:
             table.rows = rows
 
         async def delete_task(task_id: int):
-            if task_manager.delete_task(task_id):
+            if get_task_manager().delete_task(task_id):
                 ui.notify(f"任务 {task_id} 已删除")
                 await refresh_table()
             else:
                 ui.notify(f"删除任务 {task_id} 失败", type="negative")
 
         async def view_task_output(task_id: int):
-            task = task_manager.get_task(task_id)
+            task = get_task_manager().get_task(task_id)
             if task and task.output:
                 with ui.dialog() as dialog, ui.card():
                     ui.label(f"任务 {task_id} 输出").classes("text-h6")
