@@ -1,6 +1,6 @@
-from datetime import datetime
+from datetime import datetime, timezone
 
-from ..models.task_model import Session, TaskModel
+from ..models.task_model import TaskModel, session
 
 
 class TaskManager:
@@ -8,7 +8,7 @@ class TaskManager:
 
     def __init__(self) -> None:
         """创建一个新的数据库会话。"""
-        self.session = Session()
+        self.session = session()
 
     def create_task(
         self, task_dir: str, task_type: str, description: str | None = None
@@ -68,7 +68,7 @@ class TaskManager:
         task = self.get_task(task_id)
         if task:
             task.status = status
-            task.updated_at = datetime.now()
+            task.updated_at = datetime.now(timezone.utc)
             if output:
                 task.output = output
             self.session.commit()

@@ -28,13 +28,31 @@ is_alive() {
 # prod 只能跑已安装的正式包，绝不回退到源码/本地构建产物。
 ensure_installed_package() {
   local env="$1"
-  local pkg_dir
-  if ! pkg_dir=$(python3 -c "import fartask, os; print(os.path.dirname(fartask.__file__))" 2>/dev/null); then
+  local package_info
+  if ! package_info=$(python3 - <<'PY'
+import importlib.metadata as metadata
+import importlib.util
+import os
+
+try:
+    spec = importlib.util.find_spec("fartask")
+    dist = metadata.distribution("fartask")
+except metadata.PackageNotFoundError:
+    raise SystemExit(1)
+if spec is None or spec.origin is None:
+    raise SystemExit(1)
+print(os.path.dirname(spec.origin))
+print("direct-url" if dist.read_text("direct_url.json") else "published")
+PY
+  ); then
     echo "[fartask] 错误：未安装 fartask（pip install fartask），无法以 $env 模式启动" >&2
     exit 1
   fi
-  if [ "$env" = "prod" ] && [[ "$pkg_dir" == "$ROOT"/* ]]; then
-    echo "[fartask] 错误：prod 模式检测到 fartask 是从源码目录($ROOT)以可编辑方式安装的，拒绝启动" >&2
+  local pkg_dir install_source
+  pkg_dir=$(sed -n '1p' <<<"$package_info")
+  install_source=$(sed -n '2p' <<<"$package_info")
+  if [ "$env" = "prod" ] && { [[ "$pkg_dir" == "$ROOT"/* ]] || [ "$install_source" = "direct-url" ]; }; then
+    echo "[fartask] 错误：prod 模式只允许已发布的 PyPI fartask 包，拒绝源码/本地构建产物" >&2
     echo "[fartask] 请先 'pip install fartask'（正式发布包）后再以 prod 模式运行" >&2
     exit 1
   fi
@@ -63,7 +81,7 @@ cmd_run() {
   local port
   port=$(port_for "$env")
   log "前台运行（$env，端口 $port）"
-  exec python3 -m fartask
+  exec python3 -m fartask --port "$port"
 }
 
 cmd_start() {
@@ -85,7 +103,7 @@ cmd_start() {
   local port
   port=$(port_for "$env")
   log "后台启动（$env，端口 $port），日志：$lf"
-  nohup python3 -m fartask >>"$lf" 2>&1 &
+  nohup python3 -m fartask --port "$port" >>"$lf" 2>&1 &
   echo $! > "$pf"
   log "已启动，PID $(cat "$pf")"
 }

@@ -15,7 +15,7 @@
 """
 
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 
 from farlog import getLogger
 from funshell import run_shell
@@ -32,7 +32,9 @@ def submit_task() -> str:
         本次提交使用的任务目录。
     """
     task_dir = os.path.join(
-        os.environ["HOME"], "workbench", datetime.now().strftime("%Y%m%d%H%M%S")
+        os.environ["HOME"],
+        "workbench",
+        datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S"),
     )
     logger.info(f"任务主目录：{task_dir}")
     os.makedirs(task_dir, exist_ok=True)
@@ -58,7 +60,7 @@ def submit_task() -> str:
                 task_manager.update_task_status(task.id, "running", output)
             except Exception as e:
                 task_manager.update_task_status(task.id, "failed", str(e))
-                raise e
+                raise
 
         elif os.path.exists("main.cpp"):
             task_type = "cpp"
@@ -78,13 +80,13 @@ def submit_task() -> str:
                 )
             except Exception as e:
                 task_manager.update_task_status(task.id, "failed", str(e))
-                raise e
+                raise
 
         logger.info("任务提交完成")
         return task_dir
     except Exception as e:
-        logger.error(f"任务执行失败: {str(e)}")
-        raise e
+        logger.error(f"任务执行失败: {e!s}")
+        raise
 
 
 if __name__ == "__main__":

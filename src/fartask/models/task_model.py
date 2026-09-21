@@ -1,6 +1,6 @@
 """任务记录的 SQLAlchemy 模型与数据库会话管理。"""
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import Column, DateTime, Engine, Integer, String, Text, create_engine
 from sqlalchemy.orm import Session as SASession
@@ -19,8 +19,12 @@ class TaskModel(Base):
     status = Column(
         String(50), default="pending"
     )  # 取值：pending（待处理）、running（运行中）、completed（已完成）、failed（失败）
-    created_at = Column(DateTime, default=datetime.now)
-    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(
+        DateTime,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
     description = Column(Text, nullable=True)
     task_type = Column(String(50))  # 取值示例：slurm、cpp 等
     output = Column(Text, nullable=True)
@@ -58,7 +62,7 @@ def get_session_factory() -> sessionmaker:
     return _session_factory
 
 
-def Session() -> SASession:  # noqa: N802 - 保持历史调用方式 Session() 兼容
+def session() -> SASession:
     """创建一个新的数据库会话（惰性初始化引擎，import 时不产生副作用）。
 
     Returns:

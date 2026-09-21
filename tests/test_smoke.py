@@ -107,7 +107,9 @@ def test_submit_task_slurm_path(tmp_path, monkeypatch):
 
     task_dir = submit_mod.submit_task()
 
-    assert task_dir == os.path.join(str(tmp_path), "workbench", os.path.basename(task_dir))
+    assert task_dir == os.path.join(
+        str(tmp_path), "workbench", os.path.basename(task_dir)
+    )
     assert os.path.isdir(task_dir)
 
     manager = submit_mod.TaskManager()
