@@ -6,9 +6,9 @@ from ..models.task_model import TaskModel, session
 class TaskManager:
     """任务记录的增删改查管理器，封装对 `TaskModel` 表的数据库访问。"""
 
-    def __init__(self) -> None:
+    def __init__(self, db_path: str = "sqlite:///tasks.db") -> None:
         """创建一个新的数据库会话。"""
-        self.session = session()
+        self.session = session(db_path)
 
     def create_task(
         self, task_dir: str, task_type: str, description: str | None = None

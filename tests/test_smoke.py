@@ -10,6 +10,7 @@
 
 import importlib
 import os
+import subprocess
 import sys
 
 import pytest
@@ -94,6 +95,24 @@ def test_task_manager_crud_isolated(tmp_path, monkeypatch):
         manager.session.close()
 
 
+def test_database_paths_are_independent(tmp_path):
+    """不同数据库连接串应获得各自的引擎和会话。"""
+    from fartask.models.task_model import get_engine, session
+
+    first_url = f"sqlite:///{tmp_path / 'first.db'}"
+    second_url = f"sqlite:///{tmp_path / 'second.db'}"
+
+    assert get_engine(first_url) is not get_engine(second_url)
+    first_session = session(first_url)
+    second_session = session(second_url)
+    try:
+        assert first_session.get_bind() is get_engine(first_url)
+        assert second_session.get_bind() is get_engine(second_url)
+    finally:
+        first_session.close()
+        second_session.close()
+
+
 def test_submit_task_slurm_path(tmp_path, monkeypatch):
     """submit_task() 的 SLURM 成功路径：检测到 config.slurm 后创建任务记录并提交。"""
     monkeypatch.setenv("HOME", str(tmp_path))
@@ -105,12 +124,19 @@ def test_submit_task_slurm_path(tmp_path, monkeypatch):
     )
     submit_mod = importlib.import_module("fartask.task.submit")
 
-    task_dir = submit_mod.submit_task()
+    calls = []
+
+    def command_runner(command, cwd):
+        calls.append((command, cwd))
+        return "Submitted batch job 123"
+
+    task_dir = submit_mod.submit_task(command_runner)
 
     assert task_dir == os.path.join(
         str(tmp_path), "workbench", os.path.basename(task_dir)
     )
     assert os.path.isdir(task_dir)
+    assert calls == [(["sbatch", "config.slurm"], task_dir)]
 
     manager = submit_mod.TaskManager()
     try:
@@ -150,7 +176,7 @@ def test_submit_task_cpp_path(tmp_path, monkeypatch):
 
 
 def test_submit_task_no_recognized_file(tmp_path, monkeypatch):
-    """既没有 config.slurm 也没有 main.cpp 时：创建任务目录，但不产生任务记录。"""
+    """既没有 config.slurm 也没有 main.cpp 时应明确拒绝提交。"""
     monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.chdir(tmp_path)
 
@@ -159,14 +185,90 @@ def test_submit_task_no_recognized_file(tmp_path, monkeypatch):
     )
     submit_mod = importlib.import_module("fartask.task.submit")
 
-    task_dir = submit_mod.submit_task()
+    with pytest.raises(submit_mod.TaskSubmissionError, match=str(tmp_path)):
+        submit_mod.submit_task()
 
-    assert os.path.isdir(task_dir)
+    assert not (tmp_path / "workbench").exists()
+
+
+@pytest.mark.parametrize("task_file", ["config.slurm", "main.cpp"])
+def test_submit_task_command_failure_is_recorded(tmp_path, monkeypatch, task_file):
+    """提交、编译或执行命令失败后，任务记录必须变为 failed。"""
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / task_file).write_text("invalid task")
+
+    _reload_isolated(
+        "fartask.task.submit", "fartask.task.manager", "fartask.models.task_model"
+    )
+    submit_mod = importlib.import_module("fartask.task.submit")
+
+    def failing_runner(command, cwd):
+        raise subprocess.CalledProcessError(1, command, stderr="command failed")
+
+    with pytest.raises(subprocess.CalledProcessError):
+        submit_mod.submit_task(failing_runner)
+
     manager = submit_mod.TaskManager()
     try:
-        assert manager.get_all_tasks() == []
+        tasks = manager.get_all_tasks()
+        assert len(tasks) == 1
+        assert tasks[0].status == "failed"
+        assert "returned non-zero exit status 1" in tasks[0].output
     finally:
         manager.session.close()
+
+
+def test_submit_task_execution_failure_is_recorded(tmp_path, monkeypatch):
+    """C++ 编译成功但执行失败时，任务记录必须变为 failed。"""
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "main.cpp").write_text("int main() { return 0; }")
+
+    _reload_isolated(
+        "fartask.task.submit", "fartask.task.manager", "fartask.models.task_model"
+    )
+    submit_mod = importlib.import_module("fartask.task.submit")
+
+    def command_runner(command, cwd):
+        if command == ["./task.app"]:
+            raise subprocess.CalledProcessError(1, command)
+        return "compiled"
+
+    with pytest.raises(subprocess.CalledProcessError):
+        submit_mod.submit_task(command_runner)
+
+    manager = submit_mod.TaskManager()
+    try:
+        tasks = manager.get_all_tasks()
+        assert len(tasks) == 1
+        assert tasks[0].status == "failed"
+    finally:
+        manager.session.close()
+
+
+def test_submit_task_supports_home_path_with_spaces(tmp_path, monkeypatch):
+    """任务目录含空格时，命令参数与工作目录仍保持完整。"""
+    home = tmp_path / "home with spaces"
+    home.mkdir()
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "config.slurm").write_text("#!/bin/bash\n")
+
+    _reload_isolated(
+        "fartask.task.submit", "fartask.task.manager", "fartask.models.task_model"
+    )
+    submit_mod = importlib.import_module("fartask.task.submit")
+    calls = []
+
+    def command_runner(command, cwd):
+        calls.append((command, cwd))
+        return "submitted"
+
+    task_dir = submit_mod.submit_task(command_runner)
+
+    assert calls == [(["sbatch", "config.slurm"], task_dir)]
+    assert task_dir.startswith(str(home))
 
 
 def test_web_app_importable(tmp_path, monkeypatch):

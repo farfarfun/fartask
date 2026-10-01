@@ -30,8 +30,8 @@ class TaskModel(Base):
     output = Column(Text, nullable=True)
 
 
-_engine = None
-_session_factory = None
+_engines: dict[str, Engine] = {}
+_session_factories: dict[str, sessionmaker] = {}
 
 
 def get_engine(db_path: str = "sqlite:///tasks.db") -> Engine:
@@ -43,29 +43,34 @@ def get_engine(db_path: str = "sqlite:///tasks.db") -> Engine:
     Returns:
         SQLAlchemy Engine 实例。
     """
-    global _engine
-    if _engine is None:
-        _engine = create_engine(db_path)
-        Base.metadata.create_all(_engine)
-    return _engine
+    if db_path not in _engines:
+        engine = create_engine(db_path)
+        Base.metadata.create_all(engine)
+        _engines[db_path] = engine
+    return _engines[db_path]
 
 
-def get_session_factory() -> sessionmaker:
+def get_session_factory(db_path: str = "sqlite:///tasks.db") -> sessionmaker:
     """获取（并按需惰性初始化）Session 工厂。
+
+    Args:
+        db_path: 数据库连接串。
 
     Returns:
         SQLAlchemy sessionmaker 实例。
     """
-    global _session_factory
-    if _session_factory is None:
-        _session_factory = sessionmaker(bind=get_engine())
-    return _session_factory
+    if db_path not in _session_factories:
+        _session_factories[db_path] = sessionmaker(bind=get_engine(db_path))
+    return _session_factories[db_path]
 
 
-def session() -> SASession:
+def session(db_path: str = "sqlite:///tasks.db") -> SASession:
     """创建一个新的数据库会话（惰性初始化引擎，import 时不产生副作用）。
+
+    Args:
+        db_path: 数据库连接串。
 
     Returns:
         SQLAlchemy Session 实例。
     """
-    return get_session_factory()()
+    return get_session_factory(db_path)()
