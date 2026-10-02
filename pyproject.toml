@@ -6,6 +6,7 @@ readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"
 dependencies = [ "funshell>=1.0.23", "farlog>=1.1.7", "sqlalchemy>=2.0.50", "nicegui>=1.4.0",]
+license-files = ["LICENSE"]
 [[project.authors]]
 name = "牛哥"
 email = "niuliangtao@qq.com"
@@ -13,7 +14,6 @@ email = "niuliangtao@qq.com"
 [[project.authors]]
 name = "farfarfun"
 email = "farfarfun@qq.com"
-
 [[project.maintainers]]
 name = "牛哥"
 email = "niuliangtao@qq.com"
@@ -21,7 +21,6 @@ email = "niuliangtao@qq.com"
 [[project.maintainers]]
 name = "farfarfun"
 email = "farfarfun@qq.com"
-
 [project.urls]
 Organization = "https://github.com/farfarfun"
 Repository = "https://github.com/farfarfun/fartask"
@@ -32,7 +31,6 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.setuptools]
-license-files = []
 
 [dependency-groups]
 dev = [ "pytest>=7.0", "ruff>=0.11.0",]
