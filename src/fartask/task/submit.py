@@ -15,13 +15,14 @@
 """
 
 import os
+import shlex
 import shutil
-import subprocess
 from collections.abc import Callable, Sequence
 from datetime import datetime, timezone
 from pathlib import Path
 
 from farlog import getLogger
+from funshell import run_shell
 
 from .manager import TaskManager
 
@@ -29,16 +30,66 @@ logger = getLogger("fartask")
 
 CommandRunner = Callable[[Sequence[str], str], str]
 
+# funshell.run_shell 只接受 shell 字符串，且捕获输出时不会按退出码抛错。
+# 让 shell 在 stdout 末尾回传退出码，调用方据此判定成败。
+_EXIT_MARKER = "__fartask_exit_code__"
+
 
 class TaskSubmissionError(ValueError):
     """当前目录不包含可提交的任务文件。"""
 
 
+class TaskCommandError(RuntimeError):
+    """外部命令以非零状态退出，或命令执行过程本身失败。"""
+
+    def __init__(
+        self, command: Sequence[str], returncode: int | None, output: str
+    ) -> None:
+        """记录失败命令的上下文。
+
+        Args:
+            command: 失败的命令参数序列。
+            returncode: 命令退出码；无法取得时为 None。
+            output: 命令的合并输出（stdout + stderr）。
+        """
+        self.command = list(command)
+        self.returncode = returncode
+        self.output = output
+        super().__init__(
+            f"命令执行失败（退出码 {returncode}）：{shlex.join(self.command)}\n{output}"
+        )
+
+
 def _run_command(command: Sequence[str], cwd: str) -> str:
-    result = subprocess.run(
-        command, cwd=cwd, check=True, capture_output=True, text=True
+    """用组织包 `funshell` 执行命令，保留参数转义、cwd、输出捕获与失败抛错语义。
+
+    Args:
+        command: 命令参数序列，内部用 `shlex.join` 转义后交给 shell，
+            含空格或 shell 元字符的路径不会被拆开或二次解释。
+        cwd: 命令的工作目录。
+
+    Returns:
+        命令的合并输出（stdout + stderr），已去除首尾空白。
+
+    Raises:
+        TaskCommandError: 命令退出码非零，或 funshell 未能正常执行命令。
+    """
+    command_line = (
+        f"{shlex.join(command)} 2>&1; printf '%s%s' {shlex.quote(_EXIT_MARKER)} \"$?\""
     )
-    return result.stdout.strip()
+    raw = run_shell(command_line, printf=False, cwd=cwd)
+    output, marker, code_text = raw.rpartition(_EXIT_MARKER)
+    if not marker:
+        # funshell 吞掉异常后只会返回 "run shell error: ..." 之类的字符串。
+        raise TaskCommandError(command, None, raw.strip())
+    try:
+        returncode = int(code_text.strip())
+    except ValueError:
+        raise TaskCommandError(command, None, raw.strip()) from None
+    output = output.strip()
+    if returncode != 0:
+        raise TaskCommandError(command, returncode, output)
+    return output
 
 
 def submit_task(command_runner: CommandRunner = _run_command) -> str:

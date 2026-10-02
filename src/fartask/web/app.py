@@ -104,5 +104,12 @@ def start_web_server(host: str = "0.0.0.0", port: int = 8080) -> None:
     Args:
         host: 监听地址，默认 0.0.0.0。
         port: 监听端口，默认 8080。
+
+    Returns:
+        无返回值；函数阻塞直到服务退出。
+
+    Note:
+        必须 `reload=False`：NiceGUI 的自动重载不支持 `python -m <package>` 启动方式，
+        开着会在 startup 阶段直接抛 RuntimeError。服务进程也不需要打开浏览器。
     """
-    ui.run(host=host, port=port, title="任务管理系统")
+    ui.run(host=host, port=port, title="任务管理系统", reload=False, show=False)

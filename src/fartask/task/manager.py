@@ -1,3 +1,5 @@
+"""任务记录的增删改查管理器。"""
+
 from datetime import datetime, timezone
 
 from ..models.task_model import TaskModel, session
@@ -7,7 +9,16 @@ class TaskManager:
     """任务记录的增删改查管理器，封装对 `TaskModel` 表的数据库访问。"""
 
     def __init__(self, db_path: str = "sqlite:///tasks.db") -> None:
-        """创建一个新的数据库会话。"""
+        """为指定数据库创建一个新的会话。
+
+        Args:
+            db_path: SQLAlchemy 数据库连接串，默认 `sqlite:///tasks.db`
+                （即当前工作目录下的 `tasks.db`）。
+
+        Returns:
+            无返回值。副作用：按需创建数据库文件与 `tasks` 表，并持有一个会话，
+            该会话在实例被回收时关闭。
+        """
         self.session = session(db_path)
 
     def create_task(

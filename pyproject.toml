@@ -1,6 +1,6 @@
 [project]
 name = "fartask"
-version = "1.0.7"
+version = "1.0.8"
 description = "Task submission and tracking for SLURM/C++ compute jobs, with a NiceGUI web dashboard"
 readme = "README.md"
 requires-python = ">=3.10"

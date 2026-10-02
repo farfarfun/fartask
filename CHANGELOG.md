@@ -1,5 +1,30 @@
 # Changelog
 
+## 1.0.8
+
+### 新增
+
+- 顶层包 `fartask` 惰性导出真实公开入口：`submit_task` / `TaskSubmissionError` / `TaskCommandError` / `TaskManager`（惰性导入，`import fartask` 不再初始化日志或数据库）。
+- `fartask.models` 导出 `TaskModel` / `get_engine` / `get_session_factory` / `session`。
+- 新增 `TaskCommandError`：外部命令非零退出或执行失败时抛出，带退出码与合并输出。
+- 补充测试：顶层惰性导出与 import 无副作用、默认命令执行器的输出捕获 / 含空格参数 / 非零退出码抛错、真实编译失败落到 `failed` 状态。
+
+### 修复
+
+- `python -m fartask` 此前根本起不来：NiceGUI 的自动重载不支持 `python -m <package>`，startup 阶段直接抛 `RuntimeError` 退出，README 的看板示例与 `scripts/setup.sh` 的 `run`/`start` 全是死路。`ui.run` 改为 `reload=False, show=False`（服务进程不需要自动重载与打开浏览器），并补端到端测试：真实起进程并断言 `/` 返回 200。
+- Shell 命令执行改用组织包 `funshell`（SPEC §2），不再直接使用裸 `subprocess`；用 `shlex.join` 转义参数并由 shell 回传退出码，保留参数不被二次解析、`cwd`、输出捕获与失败抛错语义。
+- `scripts/setup.sh` 不再只靠 `kill -0` 判断服务身份：`start`/`stop`/`status` 先用 `.run/fartask-<env>.cmd` 的命令行指纹核对 `/proc/<pid>/cmdline`（无 `/proc` 时回退 `ps`），PID 被复用时按陈旧 PID 处理且不发送终止信号。
+- README 安装方式与当前发布状态一致：`fartask` 尚未发布到 PyPI，改为源码安装，并说明 `prod` 需要从包索引安装的正式包、当前应使用 `dev`。
+
+### 变更
+
+- 移除空壳公开类 `fartask.Task`（`fartask.models.base`）：它接受任意参数且 `run()` 不做任何事，不作为公开 API 保留。
+- `main()` / `TaskManager.__init__` 补齐中文 docstring，说明参数、返回值与副作用。
+
+### 废弃
+
+（无）
+
 ## 1.0.7
 
 ### 新增

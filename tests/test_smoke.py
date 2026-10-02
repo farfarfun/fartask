@@ -1,11 +1,11 @@
 """fartask 测试套件。
 
 覆盖：
-- 顶层包 / 子模块的 import
-- 核心公开类/函数的基础调用
+- 顶层包 / 子模块的 import 与惰性公开入口
 - TaskManager 的 CRUD 流程（真实 sqlite，隔离在 tmp_path）
-- submit_task() 的 SLURM/C++ 两条真实成功路径（真实执行 g++/subprocess，
-  不 mock 掉核心行为），以及"两种任务文件都不存在"的边界情况
+- submit_task() 的 SLURM/C++ 两条真实成功路径（真实执行 g++，不 mock 掉核心行为），
+  以及"两种任务文件都不存在"、命令失败、路径含空格等边界情况
+- 默认命令执行器（funshell）的输出捕获与非零退出码抛错行为
 """
 
 import importlib
@@ -26,26 +26,52 @@ def test_import_top_level_package():
     """顶层包 `fartask` 应该可以被正常导入（不触发任何真实 IO）。"""
     import fartask
 
-    assert hasattr(fartask, "Task")
+    assert set(fartask.__all__) == {
+        "TaskCommandError",
+        "TaskManager",
+        "TaskSubmissionError",
+        "submit_task",
+    }
 
 
-def test_task_class_basic_usage():
-    """核心公开类 Task 用简单参数构造和调用应不报错。"""
-    from fartask import Task
+def test_top_level_lazy_exports():
+    """顶层惰性导出应解析到真实实现，未知属性要抛 AttributeError。"""
+    import fartask
+    from fartask.task.manager import TaskManager
+    from fartask.task.submit import (
+        TaskCommandError,
+        TaskSubmissionError,
+        submit_task,
+    )
 
-    task = Task()
-    assert task.run() is None
-    # 任意参数也应该被静默接受（当前实现是空壳）
-    task2 = Task(1, 2, foo="bar")
-    assert task2.run(a=1, b=2) is None
+    assert fartask.TaskManager is TaskManager
+    assert fartask.submit_task is submit_task
+    assert fartask.TaskSubmissionError is TaskSubmissionError
+    assert fartask.TaskCommandError is TaskCommandError
+    assert "submit_task" in dir(fartask)
+    with pytest.raises(AttributeError):
+        getattr(fartask, "not_a_public_entry")  # noqa: B009
+
+
+def test_top_level_import_has_no_side_effect(tmp_path, monkeypatch):
+    """`import fartask` 本身不应创建日志目录或数据库文件。"""
+    monkeypatch.chdir(tmp_path)
+    _reload_isolated("fartask")
+
+    importlib.import_module("fartask")
+
+    assert list(tmp_path.iterdir()) == []
 
 
 def test_models_package_importable():
-    """fartask.models 子包能正常导入并暴露 Task。"""
-    from fartask.models import Task
-    from fartask.models.base import Task as BaseTask
+    """fartask.models 子包应暴露数据模型与会话入口。"""
+    from fartask.models import TaskModel, get_engine, get_session_factory, session
+    from fartask.models.task_model import TaskModel as DirectTaskModel
 
-    assert Task is BaseTask
+    assert TaskModel is DirectTaskModel
+    assert callable(get_engine)
+    assert callable(get_session_factory)
+    assert callable(session)
 
 
 def test_task_model_import_has_no_side_effect(tmp_path, monkeypatch):
@@ -271,6 +297,60 @@ def test_submit_task_supports_home_path_with_spaces(tmp_path, monkeypatch):
     assert task_dir.startswith(str(home))
 
 
+def test_default_command_runner_captures_output_in_cwd(tmp_path):
+    """默认命令执行器应在指定工作目录执行并返回捕获到的输出。"""
+    from fartask.task.submit import _run_command
+
+    (tmp_path / "payload.txt").write_text("hello\n")
+
+    assert _run_command(["cat", "payload.txt"], str(tmp_path)) == "hello"
+
+
+def test_default_command_runner_handles_paths_with_spaces(tmp_path):
+    """参数含空格时必须整体传递，不能被 shell 拆成多个参数。"""
+    from fartask.task.submit import _run_command
+
+    work_dir = tmp_path / "dir with spaces"
+    work_dir.mkdir()
+    (work_dir / "file with spaces.txt").write_text("ok\n")
+
+    assert _run_command(["cat", "file with spaces.txt"], str(work_dir)) == "ok"
+
+
+def test_default_command_runner_raises_on_non_zero_exit(tmp_path):
+    """命令退出码非零时必须抛错，并带上退出码与合并输出。"""
+    from fartask.task.submit import TaskCommandError, _run_command
+
+    with pytest.raises(TaskCommandError) as excinfo:
+        _run_command(["sh", "-c", "echo boom >&2; exit 3"], str(tmp_path))
+
+    assert excinfo.value.returncode == 3
+    assert "boom" in excinfo.value.output
+
+
+def test_submit_task_real_compile_failure_marks_failed(tmp_path, monkeypatch):
+    """用默认执行器真实编译失败时，必须抛错并把任务记录标记为 failed。"""
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "main.cpp").write_text("this is not valid c++\n")
+
+    _reload_isolated(
+        "fartask.task.submit", "fartask.task.manager", "fartask.models.task_model"
+    )
+    submit_mod = importlib.import_module("fartask.task.submit")
+
+    with pytest.raises(submit_mod.TaskCommandError):
+        submit_mod.submit_task()
+
+    manager = submit_mod.TaskManager()
+    try:
+        tasks = manager.get_all_tasks()
+        assert len(tasks) == 1
+        assert tasks[0].status == "failed"
+    finally:
+        manager.session.close()
+
+
 def test_web_app_importable(tmp_path, monkeypatch):
     """fartask.web.app 是 __main__ 入口引用的公开子模块，应能正常 import。"""
     monkeypatch.chdir(tmp_path)
@@ -286,6 +366,62 @@ def test_web_app_importable(tmp_path, monkeypatch):
     assert callable(app_mod.start_web_server)
     assert callable(app_mod.create_task_list)
     assert callable(app_mod.main_page)
+
+
+def _free_port():
+    """取一个当前空闲的本地端口。"""
+    import socket
+
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        return sock.getsockname()[1]
+
+
+def test_python_m_fartask_serves_dashboard(tmp_path):
+    """README 记录的 `python -m fartask` 必须真的能起服务并响应 HTTP 请求。
+
+    NiceGUI 的自动重载不支持 `python -m <package>`，开着会在 startup 阶段抛
+    RuntimeError 并退出——这条测试就是守住这个回归。
+    """
+    import time
+    import urllib.error
+    import urllib.request
+
+    port = _free_port()
+    # NiceGUI 看到继承来的 PYTEST_CURRENT_TEST 会切到它自己的 screen-test 模式，
+    # 这里要测的是普通启动路径，所以去掉这个变量。
+    env = {k: v for k, v in os.environ.items() if k != "PYTEST_CURRENT_TEST"}
+    process = subprocess.Popen(
+        [sys.executable, "-m", "fartask", "--host", "127.0.0.1", "--port", str(port)],
+        cwd=tmp_path,
+        env=env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+    )
+    try:
+        deadline = time.monotonic() + 90
+        last_error = None
+        while time.monotonic() < deadline:
+            if process.poll() is not None:
+                pytest.fail(f"看板进程提前退出：\n{process.stdout.read()}")
+            try:
+                with urllib.request.urlopen(
+                    f"http://127.0.0.1:{port}/", timeout=2
+                ) as response:
+                    assert response.status == 200
+                    return
+            except (urllib.error.URLError, OSError) as exc:  # 服务还没起来
+                last_error = exc
+                time.sleep(0.5)
+        pytest.fail(f"看板在 90s 内未就绪，最后一次错误：{last_error}")
+    finally:
+        process.terminate()
+        try:
+            process.wait(timeout=20)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait(timeout=20)
 
 
 def test_cli_entry_point_absent():

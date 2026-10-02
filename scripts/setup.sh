@@ -19,10 +19,48 @@ log() { echo "[fartask] $*"; }
 
 pid_file() { echo "$RUN_DIR/fartask-$1.pid"; }
 log_file() { echo "$RUN_DIR/fartask-$1.log"; }
+cmd_file() { echo "$RUN_DIR/fartask-$1.cmd"; }
 
 is_alive() {
   local pid="$1"
   [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null
+}
+
+proc_cmdline() {
+  local pid="$1"
+  local raw=""
+  if [ -r "/proc/$pid/cmdline" ]; then
+    raw=$(tr '\0' ' ' < "/proc/$pid/cmdline")
+  else
+    raw=$(ps -p "$pid" -o args= 2>/dev/null || true)
+  fi
+  # 去掉尾部空白（/proc 的 cmdline 以 NUL 结尾，转换后会多一个空格）
+  echo "${raw%"${raw##*[![:space:]]}"}"
+}
+
+# PID 存活只能证明"有进程"，不能证明"是本服务"：PID 会被系统回收复用。
+# 用启动时落盘的命令行指纹核对进程身份，不匹配就按陈旧 PID 处理，不发信号。
+is_our_service() {
+  local pid="$1" env="$2"
+  is_alive "$pid" || return 1
+  local actual cf
+  actual=$(proc_cmdline "$pid")
+  [ -n "$actual" ] || return 1
+  cf=$(cmd_file "$env")
+  if [ -f "$cf" ]; then
+    [ "$actual" = "$(cat "$cf")" ]
+    return
+  fi
+  # 没有指纹文件（如历史遗留的 PID 文件）时，退化为校验这确实是看板进程
+  case "$actual" in
+    *"-m fartask"*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+clear_runtime_files() {
+  local env="$1"
+  rm -f "$(pid_file "$env")" "$(cmd_file "$env")"
 }
 
 # prod 只能跑已安装的正式包，绝不回退到源码/本地构建产物。
@@ -45,15 +83,15 @@ print(os.path.dirname(spec.origin))
 print("direct-url" if dist.read_text("direct_url.json") else "published")
 PY
   ); then
-    echo "[fartask] 错误：未安装 fartask（pip install fartask），无法以 $env 模式启动" >&2
+    echo "[fartask] 错误：当前环境未安装 fartask（dev 用 'uv sync'），无法以 $env 模式启动" >&2
     exit 1
   fi
   local pkg_dir install_source
   pkg_dir=$(sed -n '1p' <<<"$package_info")
   install_source=$(sed -n '2p' <<<"$package_info")
   if [ "$env" = "prod" ] && { [[ "$pkg_dir" == "$ROOT"/* ]] || [ "$install_source" = "direct-url" ]; }; then
-    echo "[fartask] 错误：prod 模式只允许已发布的 PyPI fartask 包，拒绝源码/本地构建产物" >&2
-    echo "[fartask] 请先 'pip install fartask'（正式发布包）后再以 prod 模式运行" >&2
+    echo "[fartask] 错误：prod 模式只允许从包索引安装的 fartask 正式包，拒绝源码/本地构建产物" >&2
+    echo "[fartask] fartask 尚未发布到 PyPI：当前请用 'scripts/setup.sh start dev'" >&2
     exit 1
   fi
 }
@@ -75,13 +113,20 @@ require_env() {
   esac
 }
 
+# 本服务的启动命令（数组），start 与 run 共用，同时作为进程身份指纹
+service_command() {
+  local env="$1"
+  SERVICE_CMD=(python3 -m fartask --port "$(port_for "$env")")
+}
+
 cmd_run() {
   local env="$1"
   ensure_installed_package "$env"
   local port
   port=$(port_for "$env")
+  service_command "$env"
   log "前台运行（$env，端口 $port）"
-  exec python3 -m fartask --port "$port"
+  exec "${SERVICE_CMD[@]}"
 }
 
 cmd_start() {
@@ -93,19 +138,26 @@ cmd_start() {
   lf=$(log_file "$env")
   if [ -f "$pf" ]; then
     pid=$(cat "$pf")
-    if is_alive "$pid"; then
+    if is_our_service "$pid" "$env"; then
       echo "[fartask] $env 已在运行（PID $pid），拒绝重复启动" >&2
       exit 1
     fi
-    log "发现陈旧 PID 文件（$pid 已不存在），清理后继续"
-    rm -f "$pf"
+    if is_alive "$pid"; then
+      log "PID $pid 仍存活但不是本服务（PID 已被复用），按陈旧 PID 文件处理"
+    else
+      log "发现陈旧 PID 文件（$pid 已不存在），清理后继续"
+    fi
+    clear_runtime_files "$env"
   fi
   local port
   port=$(port_for "$env")
+  service_command "$env"
   log "后台启动（$env，端口 $port），日志：$lf"
-  nohup python3 -m fartask --port "$port" >>"$lf" 2>&1 &
-  echo $! > "$pf"
-  log "已启动，PID $(cat "$pf")"
+  nohup "${SERVICE_CMD[@]}" >>"$lf" 2>&1 &
+  pid=$!
+  echo "$pid" > "$pf"
+  echo "${SERVICE_CMD[*]}" > "$(cmd_file "$env")"
+  log "已启动，PID $pid"
 }
 
 cmd_stop() {
@@ -118,13 +170,15 @@ cmd_stop() {
   fi
   local pid
   pid=$(cat "$pf")
-  if is_alive "$pid"; then
+  if is_our_service "$pid" "$env"; then
     kill "$pid"
     log "已停止 $env（PID $pid）"
+  elif is_alive "$pid"; then
+    log "PID $pid 仍存活但不是本服务（PID 已被复用），不发送终止信号，仅清理运行时文件"
   else
     log "$env PID 文件陈旧（$pid 已不存在）"
   fi
-  rm -f "$pf"
+  clear_runtime_files "$env"
 }
 
 cmd_restart() {
@@ -140,8 +194,10 @@ cmd_status() {
     pf=$(pid_file "$env")
     if [ -f "$pf" ]; then
       pid=$(cat "$pf")
-      if is_alive "$pid"; then
+      if is_our_service "$pid" "$env"; then
         log "$env: 运行中（PID $pid，端口 $(port_for "$env")）"
+      elif is_alive "$pid"; then
+        log "$env: 未运行（PID $pid 已被其他进程复用，PID 文件陈旧）"
       else
         log "$env: 未运行（陈旧 PID 文件 $pid）"
       fi
