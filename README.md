@@ -4,7 +4,11 @@ Task submission and tracking for SLURM cluster jobs and local C++ compile-and-ru
 
 ## Install
 
-`fartask` is not published on PyPI yet, so install it from the source checkout:
+```bash
+pip install fartask
+```
+
+For development, work from a source checkout:
 
 ```bash
 git clone https://github.com/farfarfun/fartask.git
