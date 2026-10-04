@@ -27,6 +27,7 @@ def test_import_top_level_package():
     import fartask
 
     assert set(fartask.__all__) == {
+        "Task",
         "TaskCommandError",
         "TaskManager",
         "TaskSubmissionError",
@@ -51,6 +52,16 @@ def test_top_level_lazy_exports():
     assert "submit_task" in dir(fartask)
     with pytest.raises(AttributeError):
         getattr(fartask, "not_a_public_entry")  # noqa: B009
+
+
+def test_deprecated_task_compatibility_entry():
+    """旧 Task 入口保留空壳行为，并在使用时提供可操作的迁移提示。"""
+    import fartask
+
+    with pytest.deprecated_call(match="submit_task"):
+        task = fartask.Task("ignored", named="ignored")
+
+    assert task.run() is None
 
 
 def test_top_level_import_has_no_side_effect(tmp_path, monkeypatch):

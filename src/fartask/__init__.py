@@ -6,8 +6,10 @@
 - `TaskSubmissionError`：当前目录没有可提交的任务文件
 - `TaskCommandError`：提交 / 编译 / 执行命令以非零状态退出
 - `TaskManager`：任务记录的增删改查
+- `Task`：已废弃的兼容空壳；请使用 `submit_task` 或 `TaskManager`
 """
 
+import warnings
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -16,7 +18,23 @@ if TYPE_CHECKING:
     from .task.submit import TaskSubmissionError as TaskSubmissionError
     from .task.submit import submit_task as submit_task
 
-__all__ = ["TaskCommandError", "TaskManager", "TaskSubmissionError", "submit_task"]
+__all__ = ["Task", "TaskCommandError", "TaskManager", "TaskSubmissionError", "submit_task"]
+
+
+class Task:
+    """已废弃的兼容类；请改用 :func:`submit_task` 或 :class:`TaskManager`。"""
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        """保留旧空壳类的构造行为，并提示迁移路径。"""
+        warnings.warn(
+            "fartask.Task 已废弃且不执行任务；请改用 submit_task() 提交任务或 "
+            "TaskManager 管理任务记录。该接口将在 2.0.0 中移除，且不会早于 1.1 版本。",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+
+    def run(self) -> None:
+        """保留旧空壳类的无操作方法。"""
 
 _LAZY_EXPORTS = {
     "TaskCommandError": "fartask.task.submit",

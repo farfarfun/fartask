@@ -91,7 +91,7 @@ PY
   install_source=$(sed -n '2p' <<<"$package_info")
   if [ "$env" = "prod" ] && { [[ "$pkg_dir" == "$ROOT"/* ]] || [ "$install_source" = "direct-url" ]; }; then
     echo "[fartask] 错误：prod 模式只允许从包索引安装的 fartask 正式包，拒绝源码/本地构建产物" >&2
-    echo "[fartask] fartask 尚未发布到 PyPI：当前请用 'scripts/setup.sh start dev'" >&2
+    echo "[fartask] 请先用 'pip install fartask' 从包索引安装正式发行版；源码开发请用 'scripts/setup.sh start dev'" >&2
     exit 1
   fi
 }
