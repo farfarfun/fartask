@@ -18,7 +18,13 @@ if TYPE_CHECKING:
     from .task.submit import TaskSubmissionError as TaskSubmissionError
     from .task.submit import submit_task as submit_task
 
-__all__ = ["Task", "TaskCommandError", "TaskManager", "TaskSubmissionError", "submit_task"]
+__all__ = [
+    "Task",
+    "TaskCommandError",
+    "TaskManager",
+    "TaskSubmissionError",
+    "submit_task",
+]
 
 
 class Task:
@@ -35,6 +41,7 @@ class Task:
 
     def run(self) -> None:
         """保留旧空壳类的无操作方法。"""
+
 
 _LAZY_EXPORTS = {
     "TaskCommandError": "fartask.task.submit",
