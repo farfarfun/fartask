@@ -1,7 +1,7 @@
 [project]
 name = "fartask"
-version = "1.0.8"
-description = "Task submission and tracking for SLURM/C++ compute jobs, with a NiceGUI web dashboard"
+version = "1.0.9"
+description = "用于提交和追踪 SLURM 集群及本地 C++ 计算任务，并提供 NiceGUI 网页看板。"
 readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"

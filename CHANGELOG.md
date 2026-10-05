@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.0.9
+
+### 修复
+
+- 恢复 `fartask.Task` 兼容入口，避免 1.0.x 修订版本破坏既有导入。该类此前和现在均不执行任务；实例化时会发出 `DeprecationWarning`，请迁移到 `submit_task()`（提交任务）或 `TaskManager`（管理任务记录）。它将至少保留至 1.1 版本，并计划在 2.0.0 移除。
+- README 说明 `fartask` 已发布到 PyPI，补齐可直接执行的本地 C++ 最小示例和 `prod` 部署方式。
+
+### 废弃
+
+- `fartask.Task`：请使用 `submit_task()` 或 `TaskManager`；计划在 2.0.0 移除，且不会早于 1.1 版本。
+
 ## 1.0.8
 
 ### 新增
@@ -14,11 +25,11 @@
 - `python -m fartask` 此前根本起不来：NiceGUI 的自动重载不支持 `python -m <package>`，startup 阶段直接抛 `RuntimeError` 退出，README 的看板示例与 `scripts/setup.sh` 的 `run`/`start` 全是死路。`ui.run` 改为 `reload=False, show=False`（服务进程不需要自动重载与打开浏览器），并补端到端测试：真实起进程并断言 `/` 返回 200。
 - Shell 命令执行改用组织包 `funshell`（SPEC §2），不再直接使用裸 `subprocess`；用 `shlex.join` 转义参数并由 shell 回传退出码，保留参数不被二次解析、`cwd`、输出捕获与失败抛错语义。
 - `scripts/setup.sh` 不再只靠 `kill -0` 判断服务身份：`start`/`stop`/`status` 先用 `.run/fartask-<env>.cmd` 的命令行指纹核对 `/proc/<pid>/cmdline`（无 `/proc` 时回退 `ps`），PID 被复用时按陈旧 PID 处理且不发送终止信号。
-- README 安装方式与当前发布状态一致：`fartask` 尚未发布到 PyPI，改为源码安装，并说明 `prod` 需要从包索引安装的正式包、当前应使用 `dev`。
+- README 当时记录为未发布到 PyPI；该状态已在 1.0.9 更正。
 
 ### 变更
 
-- 移除空壳公开类 `fartask.Task`（`fartask.models.base`）：它接受任意参数且 `run()` 不做任何事，不作为公开 API 保留。
+- 移除空壳公开类 `fartask.Task`（`fartask.models.base`）：它接受任意参数且 `run()` 不做任何事，不作为公开 API 保留；该变更已在 1.0.9 恢复兼容入口并标记废弃。
 - `main()` / `TaskManager.__init__` 补齐中文 docstring，说明参数、返回值与副作用。
 
 ### 废弃

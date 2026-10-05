@@ -8,7 +8,7 @@ Task submission and tracking for SLURM cluster jobs and local C++ compile-and-ru
 pip install fartask
 ```
 
-For development, work from a source checkout:
+`fartask` 1.0.8 is available on PyPI. For source development, use a checkout instead:
 
 ```bash
 git clone https://github.com/farfarfun/fartask.git
@@ -18,15 +18,27 @@ uv sync            # development environment (or: pip install .)
 
 ## Usage
 
-Submit a task from a directory containing either `config.slurm` (submitted via `sbatch`) or `main.cpp` (compiled with `g++` and executed locally):
+Run `submit_task()` inside a task directory containing either `config.slurm` (submitted via `sbatch`) or `main.cpp` (compiled with `g++` and executed locally). The following local C++ example is runnable after installing `fartask` and a C++ compiler that provides `g++`:
 
-```python
+```bash
+mkdir fartask-example
+cd fartask-example
+cat > main.cpp <<'EOF'
+#include <cstdio>
+int main() { std::puts("hello from fartask"); }
+EOF
+
+python - <<'PY'
 from fartask import submit_task
 
 task_dir = submit_task()
+print(task_dir)
+PY
 ```
 
 `submit_task()` copies the job files into a timestamped directory under `$HOME/workbench`, runs the job there, and returns that directory. It raises `TaskSubmissionError` when the current directory contains neither `config.slurm` nor `main.cpp`, and `TaskCommandError` when submission, compilation or execution exits non-zero.
+
+For a SLURM task, create `config.slurm` in the task directory instead. Its submission requires an available `sbatch` command and access to the target SLURM cluster.
 
 Each submission is recorded in a local SQLite database (`tasks.db`) with its status (`pending`/`running`/`completed`/`failed`) and output. Query or edit those records with `TaskManager`:
 
@@ -55,7 +67,20 @@ scripts/setup.sh status
 scripts/setup.sh stop dev
 ```
 
-`prod` only runs a `fartask` distribution installed from a package index; it refuses to start from an editable or locally built checkout. Since the package is not on PyPI yet, use `dev` for now — `prod` becomes available once a release is published.
+`prod` only runs a `fartask` distribution installed from a package index; it refuses to start from an editable or locally built checkout. To use it, install the published package, then run the service script from a source checkout:
+
+```bash
+pip install fartask
+git clone https://github.com/farfarfun/fartask.git
+cd fartask
+scripts/setup.sh start prod
+```
+
+Use `dev` when developing from that checkout with `uv sync` or `pip install -e .`.
+
+## Migration
+
+`fartask.Task` is retained as a deprecated compatibility class in 1.0.9. It never submitted or managed tasks and now emits a `DeprecationWarning` when instantiated. Use `submit_task()` to submit work and `TaskManager` to query or update task records. `Task` will not be removed before 1.1 and is planned for removal in 2.0.0.
 
 ---
 
