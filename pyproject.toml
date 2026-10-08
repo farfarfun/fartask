@@ -26,6 +26,9 @@ Organization = "https://github.com/farfarfun"
 Repository = "https://github.com/farfarfun/fartask"
 Releases = "https://github.com/farfarfun/fartask/releases"
 
+[project.scripts]
+fartask = "fartask.__main__:main"
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"

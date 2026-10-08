@@ -58,25 +58,24 @@ python -m fartask
 
 This starts a NiceGUI server (default `http://0.0.0.0:8080`) listing all tasks with options to view output or delete a task.
 
-For long-running deployments, use `scripts/setup.sh` to manage the dashboard process (`run`/`start`/`stop`/`restart` each require a `dev` or `prod` environment argument; `status` reports both):
+For long-running deployments, install either the current checkout or a published version, then manage the one installed dashboard process:
 
 ```bash
-scripts/setup.sh start dev    # background
-scripts/setup.sh run dev      # foreground
+scripts/setup.sh install-dev  # build and install this checkout
+scripts/setup.sh start        # background
+scripts/setup.sh run          # foreground
 scripts/setup.sh status
-scripts/setup.sh stop dev
+scripts/setup.sh stop
 ```
 
-`prod` only runs a `fartask` distribution installed from a package index; it refuses to start from an editable or locally built checkout. To use it, install the published package, then run the service script from a source checkout:
+For a production host, install a published version instead. Runtime commands intentionally have no `dev`/`prod` argument; the currently installed package determines what runs.
 
 ```bash
-pip install fartask
 git clone https://github.com/farfarfun/fartask.git
 cd fartask
-scripts/setup.sh start prod
+scripts/setup.sh install-prod 1.0.9
+scripts/setup.sh start
 ```
-
-Use `dev` when developing from that checkout with `uv sync` or `pip install -e .`.
 
 ## Migration
 
