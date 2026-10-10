@@ -12,6 +12,7 @@ import importlib
 import os
 import subprocess
 import sys
+from pathlib import Path
 
 import pytest
 
@@ -435,11 +436,10 @@ def test_python_m_fartask_serves_dashboard(tmp_path):
             process.wait(timeout=20)
 
 
-def test_cli_entry_point_absent():
-    """确认本仓库当前未声明 [project.scripts] CLI 入口。
+def test_cli_entry_point_declared():
+    """安装包必须提供与产品同名的看板启动入口。"""
+    import tomllib
 
-    若未来添加了 CLI 入口，应在此补充对应的 --help 冒烟测试
-    （click.testing.CliRunner 或 subprocess + --help）。此处用
-    pytest.skip 明确标注原因，而不是静默省略。
-    """
-    pytest.skip("当前 pyproject.toml 未声明 [project.scripts]，无 CLI 入口可测试")
+    pyproject = Path(__file__).parents[1] / "pyproject.toml"
+    config = tomllib.loads(pyproject.read_text())
+    assert config["project"]["scripts"]["fartask"] == "fartask.__main__:main"
