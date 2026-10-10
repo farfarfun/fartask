@@ -438,8 +438,5 @@ def test_python_m_fartask_serves_dashboard(tmp_path):
 
 def test_cli_entry_point_declared():
     """安装包必须提供与产品同名的看板启动入口。"""
-    import tomllib
-
     pyproject = Path(__file__).parents[1] / "pyproject.toml"
-    config = tomllib.loads(pyproject.read_text())
-    assert config["project"]["scripts"]["fartask"] == "fartask.__main__:main"
+    assert 'fartask = "fartask.__main__:main"' in pyproject.read_text()
