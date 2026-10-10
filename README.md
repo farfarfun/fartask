@@ -1,14 +1,14 @@
 # fartask
 
-Task submission and tracking for SLURM cluster jobs and local C++ compile-and-run jobs, with a NiceGUI web dashboard for monitoring task status.
+用于提交和追踪 SLURM 集群任务及本地 C++ 编译运行任务，并提供 NiceGUI 网页看板监控任务状态。
 
-## Install
+## 安装
 
 ```bash
 pip install fartask
 ```
 
-`fartask` 1.0.8 is available on PyPI. For source development, use a checkout instead:
+PyPI 当前发布版本为 `1.0.8`；仓库源码版本为 `1.0.9`，尚未发布。源码开发请使用检出副本：
 
 ```bash
 git clone https://github.com/farfarfun/fartask.git
@@ -16,9 +16,9 @@ cd fartask
 uv sync            # development environment (or: pip install .)
 ```
 
-## Usage
+## 使用
 
-Run `submit_task()` inside a task directory containing either `config.slurm` (submitted via `sbatch`) or `main.cpp` (compiled with `g++` and executed locally). The following local C++ example is runnable after installing `fartask` and a C++ compiler that provides `g++`:
+在任务目录中调用 `submit_task()`。目录应包含 `config.slurm`（通过 `sbatch` 提交）或 `main.cpp`（使用 `g++` 编译并在本地运行）。安装 `fartask` 及提供 `g++` 的 C++ 编译器后，可运行以下本地 C++ 示例：
 
 ```bash
 mkdir fartask-example
@@ -36,11 +36,11 @@ print(task_dir)
 PY
 ```
 
-`submit_task()` copies the job files into a timestamped directory under `$HOME/workbench`, runs the job there, and returns that directory. It raises `TaskSubmissionError` when the current directory contains neither `config.slurm` nor `main.cpp`, and `TaskCommandError` when submission, compilation or execution exits non-zero.
+`submit_task()` 会将任务文件复制到 `$HOME/workbench` 下按时间命名的目录中，在那里运行任务并返回该目录。当前目录既没有 `config.slurm` 也没有 `main.cpp` 时会抛出 `TaskSubmissionError`；提交、编译或执行以非零状态退出时会抛出 `TaskCommandError`。
 
-For a SLURM task, create `config.slurm` in the task directory instead. Its submission requires an available `sbatch` command and access to the target SLURM cluster.
+SLURM 任务则在任务目录创建 `config.slurm`。提交需要可用的 `sbatch` 命令及目标 SLURM 集群的访问权限。
 
-Each submission is recorded in a local SQLite database (`tasks.db`) with its status (`pending`/`running`/`completed`/`failed`) and output. Query or edit those records with `TaskManager`:
+每次提交都会记录在本地 SQLite 数据库（`tasks.db`）中，包含状态（`pending`/`running`/`completed`/`failed`）及输出。可通过 `TaskManager` 查询或编辑这些记录：
 
 ```python
 from fartask import TaskManager
@@ -50,15 +50,15 @@ for task in manager.get_all_tasks():
     print(task.id, task.task_type, task.status)
 ```
 
-Launch the web dashboard to view and manage tasks:
+使用已安装的 CLI 启动网页看板，以查看和管理任务：
 
 ```bash
-python -m fartask
+fartask
 ```
 
-This starts a NiceGUI server (default `http://0.0.0.0:8080`) listing all tasks with options to view output or delete a task.
+该命令启动 NiceGUI 服务（默认 `http://0.0.0.0:8080`），列出全部任务，并可查看输出或删除任务。
 
-For long-running deployments, install either the current checkout or a published version, then manage the one installed dashboard process:
+长期运行的部署可安装当前检出版本或已发布版本，再管理这个已安装的看板进程：
 
 ```bash
 scripts/setup.sh install-dev  # build and install this checkout
@@ -68,7 +68,7 @@ scripts/setup.sh status
 scripts/setup.sh stop
 ```
 
-For a production host, install a published version instead. Runtime commands intentionally have no `dev`/`prod` argument; the currently installed package determines what runs.
+生产主机应安装已发布版本。运行命令刻意不提供 `dev`/`prod` 参数；实际运行内容由当前安装的包决定。
 
 ```bash
 git clone https://github.com/farfarfun/fartask.git
@@ -77,9 +77,9 @@ scripts/setup.sh install-prod 1.0.9
 scripts/setup.sh start
 ```
 
-## Migration
+## 迁移说明
 
-`fartask.Task` is retained as a deprecated compatibility class in 1.0.9. It never submitted or managed tasks and now emits a `DeprecationWarning` when instantiated. Use `submit_task()` to submit work and `TaskManager` to query or update task records. `Task` will not be removed before 1.1 and is planned for removal in 2.0.0.
+`fartask.Task` 在 1.0.9 中作为已废弃的兼容类保留。它从未提交或管理任务，实例化时现在会发出 `DeprecationWarning`。请使用 `submit_task()` 提交任务，使用 `TaskManager` 查询或更新任务记录。`Task` 不会在 1.1 前移除，计划在 2.0.0 移除。
 
 ---
 
