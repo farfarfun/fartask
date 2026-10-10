@@ -5,7 +5,7 @@ description = "用于提交和追踪 SLURM 集群及本地 C++ 计算任务，�
 readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"
-dependencies = [ "funshell>=1.0.23", "farlog>=1.1.7", "sqlalchemy>=2.0.50", "nicegui>=1.4.0",]
+dependencies = [ "funshell>=1.0.23", "farlog>=1.1.7", "sqlalchemy>=2.0.50", "nicegui>=1.4.0", "typer>=0.12",]
 license-files = ["LICENSE"]
 [[project.authors]]
 name = "牛哥"
